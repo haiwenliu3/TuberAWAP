@@ -27,12 +27,18 @@ class player_robot(Robot):
         #                                            #
         # README - My_Robot                          #
         ##############################################
+        self.time_turn_back = 500
+        self.direction = self.random_dir()
         self.toHome = []
         self.turns_left = 1000
         self.numturns = 0            
         self.goinghome = False;      
         self.targetPath = None
         self.targetDest = (0,0)
+
+    def random_dir(self):
+        self.directions =[(-1, -1), (0, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1)]
+        return self.directions[random.randint(0, len(self.directions)-1)]
 
     # A couple of helper functions (Implemented at the bottom)
     def OppositeDir(self, direction):
@@ -56,17 +62,15 @@ class player_robot(Robot):
     def get_move(self, view):
         self.turns_left -= 1
 
-        actionToTake = self.disperse(view)
-        self.toHome.append(actionToTake)
-        return (actionToTake, Actions.DROP_NONE)
+        if(self.storage_remaining() == 0):
+            self.goinghome = True
+
+        if(self.turns_left == 975):
+            self.direction = self.random_dir()
+        if(self.turns_left % 100 == 0):
+            self.direction = self.random_dir()
         
-        if(self.turns_left > 800):
-            #disperse
-            
-            actionToTake = self.disperse(view)
-            self.toHome.append(actionToTake)
-            return (actionToTake, Actions.DROP_NONE)
-        elif(self.turns_left > 425):
+        if(self.turns_left > self.time_turn_back):
             # Search for resources
 
             viewLen = len(view)
@@ -79,7 +83,8 @@ class player_robot(Robot):
             # If you can't find any resources...go in a random direction!
             actionToTake = None
             if(self.targetPath == None):
-                actionToTake = self.FindRandomPath(view)
+                #actionToTake = self.FindRandomPath(view)
+                actionToTake = self.DirectionPath(view)
 
             # Congrats! You have found a resource
             elif(self.targetPath == []):
@@ -94,10 +99,13 @@ class player_robot(Robot):
             assert(isinstance(actionToTake, int))
             return (actionToTake, markerDrop)
         else:
+            self.goinghome = True
+        if(self.goinghome):
             #go home
-            # You are t home
+            # You are home
             if(self.toHome == []):
                 self.goinghome = False
+                self.time_turn_back = self.turns_left / 2
                 return (Actions.DROPOFF, Actions.DROP_NONE)
             # Trace your steps back home
             prevAction = self.toHome.pop()
@@ -105,6 +113,86 @@ class player_robot(Robot):
             assert(isinstance(revAction, int))
             return (revAction, Actions.DROP_NONE)
 
+    def avoidObstacles(self, view, direction): # avoids obstacles
+        viewLen = len(view)
+        if direction == (0, 1):
+            new = Actions.MOVE_SW
+            if (view[viewLen//2+1][viewLen//2-1][0].CanMove()):
+                return new
+            else:
+                return self.avoidObstacles(view, (-1, 1))
+        elif direction == (-1, 1):
+            new = Actions.MOVE_W
+            if (view[viewLen//2][viewLen//2-1][0].CanMove()):
+                return new
+            else:
+                return self.avoidObstacles(view, (-1, 0))
+        elif direction == (-1, 0):
+            new = Actions.MOVE_NW
+            if (view[viewLen//2-1][viewLen//2-1][0].CanMove()):
+                return new
+            else:
+                return self.avoidObstacles(view, (-1, -1))
+        elif direction == (-1, -1):
+            new = Actions.MOVE_N
+            if (view[viewLen//2-1][viewLen//2][0].CanMove()):
+                return new
+            else:
+                return self.avoidObstacles(view, (0, -1))
+        elif direction == (0, -1):
+            new = Actions.MOVE_NE
+            if (view[viewLen//2-1][viewLen//2+1][0].CanMove()):
+                return new
+            else:
+                return self.avoidObstacles(view, (1, -1))
+        elif direction == (1, -1):
+            new = Actions.MOVE_E
+            if (view[viewLen//2][viewLen//2+1][0].CanMove()):
+                return new
+            else:
+                return self.avoidObstacles(view, (1, 0))
+        elif direction == (1, 0):
+            new = Actions.MOVE_SE
+            if (view[viewLen//2+1][viewLen//2+1][0].CanMove()):
+                return new
+            else:
+                return self.avoidObstacles(view, (1, 1))
+        else:
+            new = Actions.MOVE_S
+            if (view[viewLen//2+1][viewLen//2][0].CanMove()):
+                return new
+            else:
+                return self.avoidObstacles(view, (0, 1))
+    
+    def get_dir(self):
+        actionToTake = Actions.MOVE_S
+        if(self.direction == (1,0)):
+            actionToTake = Actions.MOVE_E
+        elif(self.direction == (1,1)):
+            actionToTake = Actions.MOVE_SE
+        elif(self.direction == (0,1)):
+            actionToTake = Actions.MOVE_S
+        elif(self.direction == (-1,1)):
+            actionToTake = Actions.MOVE_SW
+        elif(self.direction == (-1,0)):
+            actionToTake = Actions.MOVE_W
+        elif(self.direction == (-1,-1)):
+            actionToTake = Actions.MOVE_NW
+        elif(self.direction == (0,-1)):
+            actionToTake = Actions.MOVE_N
+        elif(self.direction == (1,-1)):
+            actionToTake = Actions.MOVE_NE
+        return actionToTake
+    
+    def DirectionPath(self, view):
+        if(view[self.get_fov()//2 + self.direction[1]][self.get_fov()//2 + self.direction[0]][0].CanMove()):
+            return self.get_dir()
+        else:
+            while(not view[self.get_fov()//2 + self.direction[1]][self.get_fov()//2 + self.direction[0]][0].CanMove()):
+                self.direction = self.random_dir()
+            return self.get_dir()
+        #return self.avoidObstacles(view, self.direction)
+    
     # Returns opposite direction
     def OppositeDir(self, prevAction):
         if(prevAction == Actions.MOVE_N):
@@ -163,8 +251,8 @@ class player_robot(Robot):
                 if(num_robots > 1 and vector == (0, 0)):
                     bias[0] += random.randint(-10, 10)
                     bias[1] += random.randint(-10, 10)
-                bias[0] += vector[0] * num_robots
-                bias[1] += vector[1] * num_robots
+                bias[0] += vector[0]# * num_robots
+                bias[1] += vector[1]# * num_robots
         bias[0] = self.sign(bias[0])
         bias[1] = self.sign(bias[1])
         return self.get_direction_from_bias(bias)
